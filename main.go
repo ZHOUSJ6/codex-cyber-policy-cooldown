@@ -66,7 +66,7 @@ import (
 
 const (
 	pluginName    = "codex-cyber-policy-cooldown"
-	pluginVersion = "0.1.1"
+	pluginVersion = "0.1.2"
 
 	// providerCodex is the CPA provider key for OpenAI Codex (ChatGPT backend).
 	providerCodex = "codex"
@@ -732,25 +732,59 @@ func managementStatusPage() string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>codex-cyber-policy-cooldown</title>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { max-width: 980px; margin: 32px auto; padding: 0 16px; line-height: 1.5; }
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --page: #f7f8fa;
+      --surface: #ffffff;
+      --subtle: #f1f3f5;
+      --text: #171a1f;
+      --muted: #667085;
+      --border: #d0d7de;
+      --primary: #0969da;
+      --danger: #cf222e;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #101112;
+      --surface: #151719;
+      --subtle: #222426;
+      --text: #f4f4f5;
+      --muted: #98a2b3;
+      --border: #444c56;
+      --primary: #1f6feb;
+      --danger: #da3633;
+    }
+    :root[data-theme="white"] { color-scheme: light; }
+    body { max-width: 980px; margin: 32px auto; padding: 0 16px; line-height: 1.5; background: var(--page); color: var(--text); }
     h1 { margin-bottom: 4px; }
     h2 { margin-top: 0; }
-    .muted { color: #667085; }
-    .card { border: 1px solid #d0d7de; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    .muted { color: var(--muted); }
+    .card { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; background: var(--surface); }
     .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .toolbar h2, .toolbar p { margin-bottom: 0; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    button { cursor: pointer; padding: 8px 12px; border: 1px solid #d0d7de; border-radius: 8px; margin: 4px 4px 4px 0; }
+    .setting-grid { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: end; gap: 16px; margin-top: 16px; }
+    .field-label { display: block; font-weight: 650; margin-bottom: 7px; }
+    .duration-control { display: flex; align-items: stretch; width: min(420px, 100%); }
+    .duration-control input { min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px 0 0 8px; background: var(--subtle); color: var(--text); font: inherit; }
+    .duration-control span { display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-left: 0; border-radius: 0 8px 8px 0; background: var(--subtle); }
+    .duration-preview { display: inline-block; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    button { cursor: pointer; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin: 4px 4px 4px 0; }
     button:disabled { cursor: not-allowed; opacity: .55; }
-    button.primary { background: #0969da; border-color: #0969da; color: white; }
-    button.danger { background: #cf222e; border-color: #cf222e; color: white; }
+    button.primary { background: var(--primary); border-color: var(--primary); color: white; }
+    button.danger { background: var(--danger); border-color: var(--danger); color: white; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border-bottom: 1px solid #d0d7de; padding: 8px; text-align: left; vertical-align: top; }
+    th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
     code { background: rgba(127,127,127,.15); padding: 2px 4px; border-radius: 4px; }
-    pre { overflow: auto; background: rgba(127,127,127,.12); padding: 12px; border-radius: 8px; }
-    .error { border-color: #cf222e; }
-    .error h2, .error p { color: #cf222e; }
+    pre { overflow: auto; background: var(--subtle); padding: 12px; border-radius: 8px; }
+    .error { border-color: var(--danger); }
+    .error h2, .error p { color: var(--danger); }
+    @media (max-width: 640px) {
+      body { margin-top: 20px; }
+      .setting-grid { grid-template-columns: 1fr; }
+      .setting-grid button { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -761,6 +795,25 @@ func managementStatusPage() string {
     <h2>管理中心会话不可用</h2>
     <p id="accessMessage">请返回 Management Center 重新登录后刷新此菜单。</p>
   </div>
+
+  <form id="cooldownForm" class="card">
+    <div>
+      <h2>策略冷却设置</h2>
+      <p class="muted">保存后写入 CPA 配置；新触发的凭据冷却使用新时长，已经开始的冷却不会被缩短。</p>
+    </div>
+    <div class="setting-grid">
+      <div>
+        <label class="field-label" for="cooldownSeconds">整份凭据冷却时间</label>
+        <div class="duration-control">
+          <input id="cooldownSeconds" name="cooldown_seconds" type="number" min="1" max="2592000" step="1" inputmode="numeric" disabled>
+          <span>秒</span>
+        </div>
+        <output id="cooldownPreview" class="duration-preview muted" for="cooldownSeconds">正在读取当前设置…</output>
+      </div>
+      <button id="saveConfigButton" class="primary" type="submit" disabled>保存冷却时间</button>
+    </div>
+    <p id="configMessage" class="muted" aria-live="polite"></p>
+  </form>
 
   <div class="card">
     <div class="toolbar">
@@ -778,7 +831,9 @@ func managementStatusPage() string {
 
   <div class="card">
     <h2>API</h2>
-    <pre>GET  /v0/management/plugins/codex-cyber-policy-cooldown/cooldowns
+    <pre>GET   /v0/management/plugins/codex-cyber-policy-cooldown/config
+PATCH /v0/management/plugins/codex-cyber-policy-cooldown/config    {"cooldown_seconds":3600}
+GET   /v0/management/plugins/codex-cyber-policy-cooldown/cooldowns
 POST /v0/management/plugins/codex-cyber-policy-cooldown/clear      {"auth_id":"..."}
 POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
   </div>
@@ -800,6 +855,11 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
       const elements = {
         accessPanel: document.getElementById("accessPanel"),
         accessMessage: document.getElementById("accessMessage"),
+        cooldownForm: document.getElementById("cooldownForm"),
+        cooldownSeconds: document.getElementById("cooldownSeconds"),
+        cooldownPreview: document.getElementById("cooldownPreview"),
+        configMessage: document.getElementById("configMessage"),
+        saveConfigButton: document.getElementById("saveConfigButton"),
         message: document.getElementById("message"),
         list: document.getElementById("list"),
         refreshButton: document.getElementById("refreshButton"),
@@ -896,6 +956,8 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
         state.managementKey = String(panelAuth.managementKey || "").trim();
         state.apiRoot = state.apiBase + managementPath;
         state.connected = Boolean(state.managementKey);
+        elements.cooldownSeconds.disabled = !state.connected;
+        elements.saveConfigButton.disabled = !state.connected;
         elements.refreshButton.disabled = !state.connected;
         elements.clearAllButton.disabled = !state.connected;
       }
@@ -905,16 +967,24 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
         state.apiRoot = "";
         state.managementKey = "";
         state.connected = false;
+        elements.cooldownSeconds.disabled = true;
+        elements.saveConfigButton.disabled = true;
         elements.refreshButton.disabled = true;
         elements.clearAllButton.disabled = true;
         elements.accessPanel.hidden = false;
         elements.accessMessage.textContent = message || "请返回 Management Center 重新登录后刷新此菜单。";
         setMessage("管理中心会话不可用。", true);
+        setConfigMessage("管理中心会话不可用。", true);
       }
 
       function setMessage(text, isError) {
         elements.message.textContent = text || "";
         elements.message.style.color = isError ? "#cf222e" : "";
+      }
+
+      function setConfigMessage(text, isError) {
+        elements.configMessage.textContent = text || "";
+        elements.configMessage.style.color = isError ? "#cf222e" : "";
       }
 
       function friendlyError(data, status) {
@@ -957,6 +1027,29 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
         const minutes = Math.floor((seconds % 3600) / 60);
         if (hours > 0) return hours + "h " + minutes + "m";
         return minutes + "m";
+      }
+
+      function formatDuration(seconds) {
+        seconds = Math.max(0, Math.floor(Number(seconds || 0)));
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        const parts = [];
+        if (days) parts.push(days + " 天");
+        if (hours) parts.push(hours + " 小时");
+        if (minutes) parts.push(minutes + " 分钟");
+        if (remainingSeconds || !parts.length) parts.push(remainingSeconds + " 秒");
+        return parts.join(" ");
+      }
+
+      function updateDurationPreview() {
+        const seconds = Number(elements.cooldownSeconds.value);
+        if (!Number.isInteger(seconds) || seconds < 1 || seconds > 2592000) {
+          elements.cooldownPreview.textContent = "请输入 1–2592000 之间的整数（最长 30 天）";
+          return;
+        }
+        elements.cooldownPreview.textContent = formatDuration(seconds) + " · 最长可设置 30 天";
       }
 
       function appendCell(row, value, asCode) {
@@ -1018,6 +1111,54 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
         }
       }
 
+      function handleConfigError(error) {
+        if (error && (error.status === 401 || error.status === 403)) {
+          disconnect(error.message);
+        } else {
+          setConfigMessage(error instanceof Error ? error.message : "配置请求失败。", true);
+        }
+      }
+
+      async function loadConfiguration(showConfirmation) {
+        try {
+          setConfigMessage("正在读取当前配置…");
+          const config = await call("/config");
+          const seconds = Number(config.cooldown_seconds || 3600);
+          elements.cooldownSeconds.value = String(seconds);
+          updateDurationPreview();
+          setConfigMessage(showConfirmation ? "冷却时间已保存并应用到新触发的冷却。" : "当前配置已加载。", false);
+        } catch (error) {
+          handleConfigError(error);
+        }
+      }
+
+      async function saveConfiguration(event) {
+        event.preventDefault();
+        const seconds = Number(elements.cooldownSeconds.value);
+        if (!Number.isInteger(seconds) || seconds < 1 || seconds > 2592000) {
+          setConfigMessage("冷却时间必须是 1–2592000 之间的整数。", true);
+          elements.cooldownSeconds.focus();
+          return;
+        }
+        elements.cooldownSeconds.disabled = true;
+        elements.saveConfigButton.disabled = true;
+        setConfigMessage("正在保存到 CPA 配置…");
+        try {
+          await call("/config", {
+            method: "PATCH",
+            body: JSON.stringify({cooldown_seconds: seconds})
+          });
+          await loadConfiguration(true);
+        } catch (error) {
+          handleConfigError(error);
+        } finally {
+          if (state.connected) {
+            elements.cooldownSeconds.disabled = false;
+            elements.saveConfigButton.disabled = false;
+          }
+        }
+      }
+
       async function refresh() {
         try {
           setMessage("加载中…");
@@ -1054,6 +1195,8 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
 
       elements.refreshButton.addEventListener("click", refresh);
       elements.clearAllButton.addEventListener("click", clearAll);
+      elements.cooldownSeconds.addEventListener("input", updateDurationPreview);
+      elements.cooldownForm.addEventListener("submit", saveConfiguration);
       applyPanelTheme();
 
       if (!isEmbedded()) {
@@ -1066,6 +1209,7 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
         return;
       }
       setSession(panelAuth);
+      loadConfiguration(false);
       refresh();
     })();
   </script>

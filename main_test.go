@@ -207,6 +207,12 @@ func TestManagementStatusPageReusesPanelSessionWithoutManualKeyInput(t *testing.
 		`"Authorization": "Bearer " + state.managementKey`,
 		`credentials = "same-origin"`,
 		`不会单独保存管理密钥`,
+		`id="cooldownSeconds"`,
+		`max="2592000"`,
+		`call("/config")`,
+		`method: "PATCH"`,
+		`JSON.stringify({cooldown_seconds: seconds})`,
+		`保存后写入 CPA 配置`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("management page missing %q", expected)
