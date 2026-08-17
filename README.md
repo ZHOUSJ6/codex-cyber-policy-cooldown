@@ -64,10 +64,10 @@ plugins:
 
 | 系统 | 架构 | Release 资产 |
 |---|---|---|
-| Linux | amd64 | `codex-cyber-policy-cooldown_0.1.1_linux_amd64.zip` |
-| Linux | arm64 | `codex-cyber-policy-cooldown_0.1.1_linux_arm64.zip` |
-| macOS | arm64 | `codex-cyber-policy-cooldown_0.1.1_darwin_arm64.zip` |
-| Windows | amd64 | `codex-cyber-policy-cooldown_0.1.1_windows_amd64.zip` |
+| Linux | amd64 | `codex-cyber-policy-cooldown_0.1.2_linux_amd64.zip` |
+| Linux | arm64 | `codex-cyber-policy-cooldown_0.1.2_linux_arm64.zip` |
+| macOS | arm64 | `codex-cyber-policy-cooldown_0.1.2_darwin_arm64.zip` |
+| Windows | amd64 | `codex-cyber-policy-cooldown_0.1.2_windows_amd64.zip` |
 
 以后推送形如 `v0.2.0` 的版本标签，仓库中的 GitHub Actions 会自动构建各平台动态库、打包 ZIP、生成 `checksums.txt` 并发布 Release。CPA 会自动把最新 Release 识别为可用更新。
 
@@ -111,7 +111,7 @@ plugins/linux/amd64/codex-cyber-policy-cooldown.so
 /v0/resource/plugins/codex-cyber-policy-cooldown/status
 ```
 
-从 Management Center 的插件菜单打开资源页时，页面会复用管理中心已有的 `cli-proxy-auth` 会话，不提供独立的管理密钥输入框，也不会另行保存管理密钥。会话失效后，请返回 Management Center 重新登录。
+从 Management Center 的插件菜单打开资源页时，页面会复用管理中心已有的 `cli-proxy-auth` 会话，不提供独立的管理密钥输入框，也不会另行保存管理密钥。资源页可以直接修改 `cooldown_seconds`；保存操作使用 CPA 的插件配置接口写回 `config.yaml`，重启后仍然有效。会话失效后，请返回 Management Center 重新登录。
 
 直接调用 Management API 时仍需使用 CPA 管理密钥：
 
