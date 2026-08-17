@@ -38,6 +38,37 @@ plugins:
 
 插件重新配置后，新触发的冷却使用新时长；已经存在的冷却不会被缩短。
 
+## 在线安装
+
+仓库根目录提供 CPA 自定义商店所需的 `registry.json`。将下面的地址加入 CPA 配置：
+
+```yaml
+plugins:
+  enabled: true
+  store-sources:
+    - https://raw.githubusercontent.com/ZHOUSJ6/codex-cyber-policy-cooldown/main/registry.json
+  configs:
+    codex-cyber-policy-cooldown:
+      enabled: true
+      priority: 100
+      match_errors:
+        - cyber_policy
+      cooldown_seconds: 3600
+```
+
+重启 CPA 或在管理界面刷新插件商店，搜索 `Codex Cyber Policy Cooldown` 并安装。CPA 会根据当前系统自动下载 `v0.1.0` Release 中对应的 ZIP，并使用 `checksums.txt` 验证 SHA256。
+
+当前发布平台：
+
+| 系统 | 架构 | Release 资产 |
+|---|---|---|
+| Linux | amd64 | `codex-cyber-policy-cooldown_0.1.0_linux_amd64.zip` |
+| Linux | arm64 | `codex-cyber-policy-cooldown_0.1.0_linux_arm64.zip` |
+| macOS | arm64 | `codex-cyber-policy-cooldown_0.1.0_darwin_arm64.zip` |
+| Windows | amd64 | `codex-cyber-policy-cooldown_0.1.0_windows_amd64.zip` |
+
+以后推送形如 `v0.2.0` 的版本标签，仓库中的 GitHub Actions 会自动构建各平台动态库、打包 ZIP、生成 `checksums.txt` 并发布 Release。CPA 会自动把最新 Release 识别为可用更新。
+
 ## 编译
 
 CPA 原生插件使用 CGO 动态库格式，需要 Go 1.21+ 和 C 编译器：
