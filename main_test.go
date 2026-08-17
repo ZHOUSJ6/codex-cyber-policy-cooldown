@@ -196,3 +196,32 @@ func TestExpiredCooldownReturnsToBuiltinScheduler(t *testing.T) {
 		t.Fatal("expired cooldown was not cleared")
 	}
 }
+
+func TestManagementStatusPageReusesPanelSessionWithoutManualKeyInput(t *testing.T) {
+	page := managementStatusPage()
+	for _, expected := range []string{
+		`cli-proxy-auth`,
+		`readPanelAuth`,
+		`enc::v1::`,
+		`isEmbedded`,
+		`"Authorization": "Bearer " + state.managementKey`,
+		`credentials = "same-origin"`,
+		`不会单独保存管理密钥`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("management page missing %q", expected)
+		}
+	}
+
+	for _, forbidden := range []string{
+		`codexCyberPolicyCooldownManagementKey`,
+		`id="key"`,
+		`localStorage.setItem`,
+		`autocomplete="current-password"`,
+		`请填入 CPA 管理密钥`,
+	} {
+		if strings.Contains(page, forbidden) {
+			t.Fatalf("management page unexpectedly contains %q", forbidden)
+		}
+	}
+}
