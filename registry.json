@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "codex-cyber-policy-cooldown",
+      "name": "Codex Cyber Policy Cooldown",
+      "description": "Cool down an entire Codex credential when a failure body matches cyber_policy.",
+      "author": "ZHOUSJ6",
+      "version": "0.1.0",
+      "repository": "https://github.com/ZHOUSJ6/codex-cyber-policy-cooldown",
+      "homepage": "https://github.com/ZHOUSJ6/codex-cyber-policy-cooldown",
+      "license": "MIT",
+      "tags": [
+        "codex",
+        "cyber-policy",
+        "credential-cooldown",
+        "scheduler",
+        "usage",
+        "management"
+      ]
+    }
+  ]
+}
