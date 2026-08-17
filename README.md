@@ -56,7 +56,7 @@ plugins:
       cooldown_seconds: 3600
 ```
 
-重启 CPA 或在管理界面刷新插件商店，搜索 `Codex Cyber Policy Cooldown` 并安装。CPA 会根据当前系统自动下载 `v0.1.0` Release 中对应的 ZIP，并使用 `checksums.txt` 验证 SHA256。
+重启 CPA 或在管理界面刷新插件商店，搜索 `Codex Cyber Policy Cooldown` 并安装。CPA 会根据当前系统自动下载最新 Release 中对应的 ZIP，并使用 `checksums.txt` 验证 SHA256。
 
 本仓库根目录的单插件 `registry.json` 继续保留以兼容旧配置；新安装建议只添加上面的统一商店源，避免重复登记。
 
@@ -64,10 +64,10 @@ plugins:
 
 | 系统 | 架构 | Release 资产 |
 |---|---|---|
-| Linux | amd64 | `codex-cyber-policy-cooldown_0.1.0_linux_amd64.zip` |
-| Linux | arm64 | `codex-cyber-policy-cooldown_0.1.0_linux_arm64.zip` |
-| macOS | arm64 | `codex-cyber-policy-cooldown_0.1.0_darwin_arm64.zip` |
-| Windows | amd64 | `codex-cyber-policy-cooldown_0.1.0_windows_amd64.zip` |
+| Linux | amd64 | `codex-cyber-policy-cooldown_0.1.1_linux_amd64.zip` |
+| Linux | arm64 | `codex-cyber-policy-cooldown_0.1.1_linux_arm64.zip` |
+| macOS | arm64 | `codex-cyber-policy-cooldown_0.1.1_darwin_arm64.zip` |
+| Windows | amd64 | `codex-cyber-policy-cooldown_0.1.1_windows_amd64.zip` |
 
 以后推送形如 `v0.2.0` 的版本标签，仓库中的 GitHub Actions 会自动构建各平台动态库、打包 ZIP、生成 `checksums.txt` 并发布 Release。CPA 会自动把最新 Release 识别为可用更新。
 
@@ -111,7 +111,9 @@ plugins/linux/amd64/codex-cyber-policy-cooldown.so
 /v0/resource/plugins/codex-cyber-policy-cooldown/status
 ```
 
-使用 CPA 管理密钥调用：
+从 Management Center 的插件菜单打开资源页时，页面会复用管理中心已有的 `cli-proxy-auth` 会话，不提供独立的管理密钥输入框，也不会另行保存管理密钥。会话失效后，请返回 Management Center 重新登录。
+
+直接调用 Management API 时仍需使用 CPA 管理密钥：
 
 ```bash
 # 查看当前处于冷却中的凭据

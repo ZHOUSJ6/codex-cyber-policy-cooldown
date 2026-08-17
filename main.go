@@ -66,7 +66,7 @@ import (
 
 const (
 	pluginName    = "codex-cyber-policy-cooldown"
-	pluginVersion = "0.1.0"
+	pluginVersion = "0.1.1"
 
 	// providerCodex is the CPA provider key for OpenAI Codex (ChatGPT backend).
 	providerCodex = "codex"
@@ -735,36 +735,44 @@ func managementStatusPage() string {
     :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { max-width: 980px; margin: 32px auto; padding: 0 16px; line-height: 1.5; }
     h1 { margin-bottom: 4px; }
+    h2 { margin-top: 0; }
     .muted { color: #667085; }
     .card { border: 1px solid #d0d7de; border-radius: 12px; padding: 16px; margin: 16px 0; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; }
-    input { width: min(640px, 100%); padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 8px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .toolbar h2, .toolbar p { margin-bottom: 0; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     button { cursor: pointer; padding: 8px 12px; border: 1px solid #d0d7de; border-radius: 8px; margin: 4px 4px 4px 0; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
     button.primary { background: #0969da; border-color: #0969da; color: white; }
     button.danger { background: #cf222e; border-color: #cf222e; color: white; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border-bottom: 1px solid #d0d7de; padding: 8px; text-align: left; vertical-align: top; }
     code { background: rgba(127,127,127,.15); padding: 2px 4px; border-radius: 4px; }
     pre { overflow: auto; background: rgba(127,127,127,.12); padding: 12px; border-radius: 8px; }
+    .error { border-color: #cf222e; }
+    .error h2, .error p { color: #cf222e; }
   </style>
 </head>
 <body>
   <h1>codex-cyber-policy-cooldown</h1>
-  <p class="muted">版本 ` + version + ` · 查看或手动清除整份 Codex 凭据的策略冷却。</p>
+  <p class="muted">版本 ` + version + ` · 查看或手动清除整份 Codex 凭据的策略冷却。页面复用 Management Center 的登录会话，不会单独保存管理密钥。</p>
 
-  <div class="card">
-    <p>资源页本身不带管理鉴权。要执行查看/解除操作，请填入 CPA 管理密钥；请求会使用 <code>Authorization: Bearer &lt;key&gt;</code>。</p>
-    <label for="key">CPA 管理密钥</label>
-    <input id="key" type="password" autocomplete="current-password" placeholder="Management key">
-    <div>
-      <button class="primary" onclick="refresh()">刷新冷却列表</button>
-      <button class="danger" onclick="clearAll()">清除全部冷却</button>
-    </div>
-    <p id="message" class="muted"></p>
+  <div id="accessPanel" class="card error" hidden>
+    <h2>管理中心会话不可用</h2>
+    <p id="accessMessage">请返回 Management Center 重新登录后刷新此菜单。</p>
   </div>
 
   <div class="card">
-    <h2>当前被插件排除的账号</h2>
+    <div class="toolbar">
+      <div>
+        <h2>当前被插件排除的账号</h2>
+        <p id="message" class="muted">正在读取 Management Center 会话…</p>
+      </div>
+      <div class="actions">
+        <button id="refreshButton" class="primary" disabled>刷新冷却列表</button>
+        <button id="clearAllButton" class="danger" disabled>清除全部冷却</button>
+      </div>
+    </div>
     <div id="list">尚未加载。</div>
   </div>
 
@@ -776,101 +784,290 @@ POST /v0/management/plugins/codex-cyber-policy-cooldown/clear-all</pre>
   </div>
 
   <script>
-    const apiBase = "/v0/management/plugins/codex-cyber-policy-cooldown";
-    const keyInput = document.getElementById("key");
-    const savedKey = localStorage.getItem("codexCyberPolicyCooldownManagementKey") || "";
-    keyInput.value = savedKey;
-    keyInput.addEventListener("change", function () {
-      localStorage.setItem("codexCyberPolicyCooldownManagementKey", keyInput.value);
-    });
+    (() => {
+      "use strict";
 
-    function headers() {
-      const h = {"Content-Type": "application/json"};
-      if (keyInput.value) h.Authorization = "Bearer " + keyInput.value;
-      return h;
-    }
+      const resourceMarker = "/v0/resource/plugins/";
+      const markerIndex = window.location.pathname.indexOf(resourceMarker);
+      const pathPrefix = markerIndex >= 0 ? window.location.pathname.slice(0, markerIndex) : "";
+      const defaultAPIBase = window.location.origin + pathPrefix;
+      const managementPath = "/v0/management/plugins/codex-cyber-policy-cooldown";
+      const authStorageKey = "cli-proxy-auth";
+      const themeStorageKey = "cli-proxy-theme";
+      const encryptedPrefix = "enc::v1::";
+      const storageSalt = "cli-proxy-api-webui::secure-storage";
 
-    function setMessage(text, isError) {
-      const el = document.getElementById("message");
-      el.textContent = text || "";
-      el.style.color = isError ? "#cf222e" : "";
-    }
+      const elements = {
+        accessPanel: document.getElementById("accessPanel"),
+        accessMessage: document.getElementById("accessMessage"),
+        message: document.getElementById("message"),
+        list: document.getElementById("list"),
+        refreshButton: document.getElementById("refreshButton"),
+        clearAllButton: document.getElementById("clearAllButton")
+      };
+      const state = {apiBase: "", apiRoot: "", managementKey: "", connected: false};
 
-    async function call(path, options) {
-      const resp = await fetch(apiBase + path, Object.assign({headers: headers()}, options || {}));
-      const text = await resp.text();
-      let data;
-      try { data = JSON.parse(text); } catch (_) { data = {raw: text}; }
-      if (!resp.ok) {
-        throw new Error((data && (data.message || data.error)) || ("HTTP " + resp.status));
+      function isEmbedded() {
+        try {
+          return window.self !== window.top;
+        } catch (_) {
+          return false;
+        }
       }
-      return data;
-    }
 
-    function formatRemaining(seconds) {
-      seconds = Math.max(0, Number(seconds || 0));
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      if (h > 0) return h + "h " + m + "m";
-      return m + "m";
-    }
+      function xorBytes(data, key) {
+        const output = new Uint8Array(data.length);
+        for (let index = 0; index < data.length; index += 1) {
+          output[index] = data[index] ^ key[index % key.length];
+        }
+        return output;
+      }
 
-    function render(data) {
-      const list = document.getElementById("list");
-      if (!data.cooldowns || data.cooldowns.length === 0) {
-        list.innerHTML = "<p>当前没有处于策略冷却中的凭据。</p>";
+      function decodeStoredValue(value) {
+        if (!value.startsWith(encryptedPrefix)) return value;
+        const binary = atob(value.slice(encryptedPrefix.length));
+        const encrypted = Uint8Array.from(binary, function (character) { return character.charCodeAt(0); });
+        const key = new TextEncoder().encode(storageSalt + "|" + window.location.host + "|" + navigator.userAgent);
+        return new TextDecoder().decode(xorBytes(encrypted, key));
+      }
+
+      function extractPanelAuth(value) {
+        if (!value || typeof value !== "object") return null;
+        const savedState = value.state && typeof value.state === "object" ? value.state : value;
+        const apiBase = typeof savedState.apiBase === "string" ? savedState.apiBase.trim() : "";
+        const managementKey = typeof savedState.managementKey === "string" ? savedState.managementKey.trim() : "";
+        if (!apiBase || !managementKey) return null;
+        return {apiBase: apiBase, managementKey: managementKey};
+      }
+
+      function readPanelAuth() {
+        if (!isEmbedded()) return null;
+        try {
+          const raw = localStorage.getItem(authStorageKey);
+          if (!raw) return null;
+          return extractPanelAuth(JSON.parse(decodeStoredValue(raw)));
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function readPanelTheme() {
+        try {
+          const raw = localStorage.getItem(themeStorageKey);
+          if (!raw) return "auto";
+          const parsed = JSON.parse(raw);
+          const savedState = parsed && parsed.state && typeof parsed.state === "object" ? parsed.state : parsed;
+          return typeof savedState.theme === "string" ? savedState.theme : "auto";
+        } catch (_) {
+          return "auto";
+        }
+      }
+
+      function applyPanelTheme() {
+        const theme = readPanelTheme();
+        const resolved = theme === "auto"
+          ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white")
+          : theme;
+        if (resolved === "dark" || resolved === "white") {
+          document.documentElement.setAttribute("data-theme", resolved);
+        } else {
+          document.documentElement.removeAttribute("data-theme");
+        }
+      }
+
+      function normalizeAPIBase(value) {
+        let base = String(value || "").trim();
+        if (!base) return defaultAPIBase;
+        base = base.replace(/\/?v0\/management\/?$/i, "").replace(/\/+$/, "");
+        if (!/^https?:\/\//i.test(base)) base = "http://" + base;
+        try {
+          const parsed = new URL(base);
+          if (parsed.origin === window.location.origin && (parsed.pathname === "" || parsed.pathname === "/") && pathPrefix) {
+            return defaultAPIBase;
+          }
+        } catch (_) {
+          return base;
+        }
+        return base;
+      }
+
+      function setSession(panelAuth) {
+        state.apiBase = normalizeAPIBase(panelAuth.apiBase);
+        state.managementKey = String(panelAuth.managementKey || "").trim();
+        state.apiRoot = state.apiBase + managementPath;
+        state.connected = Boolean(state.managementKey);
+        elements.refreshButton.disabled = !state.connected;
+        elements.clearAllButton.disabled = !state.connected;
+      }
+
+      function disconnect(message) {
+        state.apiBase = "";
+        state.apiRoot = "";
+        state.managementKey = "";
+        state.connected = false;
+        elements.refreshButton.disabled = true;
+        elements.clearAllButton.disabled = true;
+        elements.accessPanel.hidden = false;
+        elements.accessMessage.textContent = message || "请返回 Management Center 重新登录后刷新此菜单。";
+        setMessage("管理中心会话不可用。", true);
+      }
+
+      function setMessage(text, isError) {
+        elements.message.textContent = text || "";
+        elements.message.style.color = isError ? "#cf222e" : "";
+      }
+
+      function friendlyError(data, status) {
+        if (status === 401) return "管理中心会话已失效，请返回 Management Center 重新登录后刷新此菜单。";
+        if (status === 403) return "当前管理身份无权访问此接口。";
+        return (data && (data.message || data.error)) || ("请求失败（HTTP " + status + "）");
+      }
+
+      async function call(path, options) {
+        if (!state.connected) throw new Error("管理中心会话不可用。");
+        const request = Object.assign({method: "GET"}, options || {});
+        request.cache = "no-store";
+        request.credentials = "same-origin";
+        request.headers = Object.assign({
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + state.managementKey
+        }, request.headers || {});
+
+        let response;
+        try {
+          response = await fetch(state.apiRoot + path, request);
+        } catch (_) {
+          throw new Error("无法连接 CLIProxyAPI，请检查服务地址和网络状态。");
+        }
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch (_) { data = {raw: text}; }
+        if (!response.ok) {
+          const error = new Error(friendlyError(data, response.status));
+          error.status = response.status;
+          throw error;
+        }
+        return data;
+      }
+
+      function formatRemaining(seconds) {
+        seconds = Math.max(0, Number(seconds || 0));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        if (hours > 0) return hours + "h " + minutes + "m";
+        return minutes + "m";
+      }
+
+      function appendCell(row, value, asCode) {
+        const cell = document.createElement("td");
+        if (asCode) {
+          const code = document.createElement("code");
+          code.textContent = String(value || "");
+          cell.appendChild(code);
+        } else {
+          cell.textContent = String(value || "");
+        }
+        row.appendChild(cell);
+      }
+
+      function render(data) {
+        elements.list.replaceChildren();
+        if (!data.cooldowns || data.cooldowns.length === 0) {
+          const empty = document.createElement("p");
+          empty.textContent = "当前没有处于策略冷却中的凭据。";
+          elements.list.appendChild(empty);
+          return;
+        }
+
+        const table = document.createElement("table");
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["Auth ID", "触发项", "解除时间", "剩余", "操作"].forEach(function (label) {
+          const cell = document.createElement("th");
+          cell.textContent = label;
+          headRow.appendChild(cell);
+        });
+        head.appendChild(headRow);
+        table.appendChild(head);
+
+        const body = document.createElement("tbody");
+        data.cooldowns.forEach(function (cooldown) {
+          const row = document.createElement("tr");
+          appendCell(row, cooldown.auth_id, true);
+          appendCell(row, cooldown.trigger, false);
+          appendCell(row, cooldown.reset_at, false);
+          appendCell(row, formatRemaining(cooldown.remaining_seconds), false);
+          const actionCell = document.createElement("td");
+          const button = document.createElement("button");
+          button.textContent = "清除冷却";
+          button.addEventListener("click", function () { clearCooldown(cooldown.auth_id); });
+          actionCell.appendChild(button);
+          row.appendChild(actionCell);
+          body.appendChild(row);
+        });
+        table.appendChild(body);
+        elements.list.appendChild(table);
+      }
+
+      function handleRequestError(error) {
+        if (error && (error.status === 401 || error.status === 403)) {
+          disconnect(error.message);
+        } else {
+          setMessage(error instanceof Error ? error.message : "请求失败。", true);
+        }
+      }
+
+      async function refresh() {
+        try {
+          setMessage("加载中…");
+          const data = await call("/cooldowns");
+          render(data);
+          elements.accessPanel.hidden = true;
+          setMessage("已连接 Management Center · 共 " + data.count + " 个账号被排除。");
+        } catch (error) {
+          handleRequestError(error);
+        }
+      }
+
+      async function clearCooldown(authID) {
+        if (!confirm("确认清除 " + authID + " 的策略冷却？")) return;
+        try {
+          const data = await call("/clear", {method: "POST", body: JSON.stringify({auth_id: authID})});
+          render(data.status);
+          setMessage(data.removed ? "已清除冷却：" + authID : "该凭据当前不在冷却列表：" + authID);
+        } catch (error) {
+          handleRequestError(error);
+        }
+      }
+
+      async function clearAll() {
+        if (!confirm("确认清除全部策略冷却？")) return;
+        try {
+          const data = await call("/clear-all", {method: "POST", body: "{}"});
+          render(data.status);
+          setMessage("已清除 " + data.removed + " 个凭据冷却。");
+        } catch (error) {
+          handleRequestError(error);
+        }
+      }
+
+      elements.refreshButton.addEventListener("click", refresh);
+      elements.clearAllButton.addEventListener("click", clearAll);
+      applyPanelTheme();
+
+      if (!isEmbedded()) {
+        disconnect("该页面只能从 Management Center 的插件菜单打开。请返回管理中心登录后访问。");
         return;
       }
-      let html = "<table><thead><tr><th>Auth ID</th><th>触发项</th><th>解除时间</th><th>剩余</th><th>操作</th></tr></thead><tbody>";
-      for (const cooldown of data.cooldowns) {
-        html += "<tr><td><code>" + escapeHtml(cooldown.auth_id) + "</code></td><td>" + escapeHtml(cooldown.trigger) + "</td><td>" + escapeHtml(cooldown.reset_at) + "</td><td>" + formatRemaining(cooldown.remaining_seconds) + "</td><td><button onclick=\"clearCooldown('" + escapeJs(cooldown.auth_id) + "')\">清除冷却</button></td></tr>";
+      const panelAuth = readPanelAuth();
+      if (!panelAuth) {
+        disconnect("未能读取 Management Center 会话。请重新登录管理中心后刷新此菜单。");
+        return;
       }
-      html += "</tbody></table>";
-      list.innerHTML = html;
-    }
-
-    function escapeHtml(value) {
-      return String(value || "").replace(/[&<>"']/g, function (c) {
-        return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
-      });
-    }
-
-    function escapeJs(value) {
-      return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-    }
-
-    async function refresh() {
-      try {
-        setMessage("加载中...");
-        const data = await call("/cooldowns");
-        render(data);
-        setMessage("已刷新，共 " + data.count + " 个账号被排除。");
-      } catch (err) {
-        setMessage(err.message, true);
-      }
-    }
-
-    async function clearCooldown(authID) {
-      if (!confirm("确认清除 " + authID + " 的策略冷却？")) return;
-      try {
-        const data = await call("/clear", {method: "POST", body: JSON.stringify({auth_id: authID})});
-        render(data.status);
-        setMessage(data.removed ? "已清除冷却：" + authID : "该凭据当前不在冷却列表：" + authID);
-      } catch (err) {
-        setMessage(err.message, true);
-      }
-    }
-
-    async function clearAll() {
-      if (!confirm("确认清除全部策略冷却？")) return;
-      try {
-        const data = await call("/clear-all", {method: "POST", body: "{}"});
-        render(data.status);
-        setMessage("已清除 " + data.removed + " 个凭据冷却。");
-      } catch (err) {
-        setMessage(err.message, true);
-      }
-    }
+      setSession(panelAuth);
+      refresh();
+    })();
   </script>
 </body>
 </html>`
