@@ -40,13 +40,13 @@ plugins:
 
 ## 在线安装
 
-仓库根目录提供 CPA 自定义商店所需的 `registry.json`。将下面的地址加入 CPA 配置：
+推荐使用统一的个人插件商店 [`ZHOUSJ6/CLIProxyAPI-Plugins-Store`](https://github.com/ZHOUSJ6/CLIProxyAPI-Plugins-Store)。将下面的地址加入 CPA 配置：
 
 ```yaml
 plugins:
   enabled: true
   store-sources:
-    - https://raw.githubusercontent.com/ZHOUSJ6/codex-cyber-policy-cooldown/main/registry.json
+    - https://raw.githubusercontent.com/ZHOUSJ6/CLIProxyAPI-Plugins-Store/main/registry.json
   configs:
     codex-cyber-policy-cooldown:
       enabled: true
@@ -57,6 +57,8 @@ plugins:
 ```
 
 重启 CPA 或在管理界面刷新插件商店，搜索 `Codex Cyber Policy Cooldown` 并安装。CPA 会根据当前系统自动下载 `v0.1.0` Release 中对应的 ZIP，并使用 `checksums.txt` 验证 SHA256。
+
+本仓库根目录的单插件 `registry.json` 继续保留以兼容旧配置；新安装建议只添加上面的统一商店源，避免重复登记。
 
 当前发布平台：
 
